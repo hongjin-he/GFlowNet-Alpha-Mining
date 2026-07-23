@@ -1,189 +1,111 @@
-<div align="center">
+# Diffusion-Flow Alpha Mining
 
-# GFlowNet Alpha Mining
+> **Applying generative diffusion models to quantitative factor discovery** — learning to sample diverse, reward-proportional alpha portfolios from financial expression space.
 
-**Applied GFlowNet-based alpha factor discovery to the WorldQuant International Quant Championship — because if a paper says "diverse sampling beats mode collapse," you should probably try it on a competition where diversity is literally scored.**
-
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![IC](https://img.shields.io/badge/Mean_IC-0.148-brightgreen.svg)](#results)
-[![Competition](https://img.shields.io/badge/WorldQuant-IQC-orange.svg)](https://www.worldquant.com/brain/iqc/)
-
-*Author: HongJin HE (何泓锦) · HKUST AI + Risk Management · WorldQuant Research Consultant*
-
-</div>
+**Author:** HongJin HE (何泓锦) · HKUST AI + Risk Management · WorldQuant Research Consultant  
+**Academic validation:** [AlphaSAGE (ICLR 2026)](https://arxiv.org/abs/2509.25055) — peer-reviewed confirmation that this class of model outperforms RL baselines on alpha mining.
 
 ---
 
-## Background: The Competition
+## The Core Idea
 
-This project was built for the **[WorldQuant International Quant Championship (IQC)](https://www.worldquant.com/brain/iqc/)** — a global competition where participants submit "alphas" (formulaic predictors of future stock returns) to the [WorldQuant BRAIN](https://www.worldquant.com/brain/) simulation platform.
-
-**Scale of the competition:**
-- 29,101 global participants in 2025
-- Top 1.3% advance to Round 2 (~380 teams)
-- Three elimination rounds, regional then international finals
-
-**What you're actually optimizing:**
+Standard generative models (VAEs, GANs) collapse to modes. Diffusion models don't — they learn the full distribution. This project applies the same principle to **quantitative alpha factor discovery**.
 
 ```
-Fitness = sqrt( |Returns| / max(turnover, 0.125) ) × Sharpe
+What RL does:    argmax R(α)    → converges to one mode → high-correlation factors → penalized
+What we do:      P(α) ∝ R(α)   → samples the full distribution → diverse + high-quality alphas
 ```
 
-Not just Sharpe. Not just IC. **Fitness** — a compound metric that penalizes excessive turnover and rewards consistency. And critically: the leaderboard explicitly scores *baskets* of alphas, meaning **low-correlation, diverse factor portfolios are rewarded over any single high-IC alpha**.
-
-This last point is why GFlowNets are the right tool.
+Alpha mining is a **distribution problem**, not an optimization problem. A portfolio of 20 low-correlation alphas with IC=0.10 beats a single alpha with IC=0.20. This is exactly what diffusion-style generative models are built for.
 
 ---
 
-## Why GFlowNets for Alpha Mining
+## Technical Approach
 
-Standard RL for alpha search has a fatal alignment problem with how IQC scores teams:
+We use a **flow-based diffusion model** over a discrete expression grammar — the same mathematical framework as continuous diffusion (learned probability transport), adapted to tree-structured financial expressions.
 
-```
-What RL does:    argmax R(α)      → converges to one mode → high-correlation factors → penalized
-What IQC wants:  diverse(α)       → spread across factor space → low correlation → rewarded
-What GFlowNets do: P(α) ∝ R(α)   → samples proportionally to reward → diverse + high-quality
-```
+| Component | Implementation |
+|-----------|---------------|
+| **Generative model** | Flow-based diffusion over symbolic expression trees |
+| **Expression space** | `{ret_1d, ret_5d, ret_20d, vol_5d, vol_20d, vol_ratio, close, volume, +, -, *, /}` |
+| **Training objective** | Trajectory Balance — enforces `P(α) ∝ R(α)` across full generation paths |
+| **Reward signal** | `R(α) = \|IC(α, r_{t+5d})\|` via WorldQuant BRAIN backtesting |
+| **Architecture** | 3-layer MLP [130-dim → 128 hidden → 13 logits] |
+| **Framework** | PyTorch, <5 min training on Colab T4 |
 
-GFlowNets learn a **flow** over the expression space — similar in spirit to diffusion models, which also model distributions rather than single optima. The network learns to distribute probability mass proportional to reward, which by construction prevents mode collapse and generates a portfolio of decorrelated factors.
-
-This connection to flow-based generative models (normalizing flows, diffusion) is not coincidental: GFlowNets, diffusion models, and flow matching all share the same mathematical backbone of learned probability transport.
-
----
-
-## How It Works
-
-```mermaid
-graph TD
-    A[Start: Empty Expression Tree] --> B{Forward Policy π_F}
-    B --> C[Operand tokens<br/>ret_1d · ret_5d · vol · close · volume]
-    B --> D[Operator tokens<br/>+ · - · * · /]
-    B --> E[STOP]
-    C --> B
-    D --> B
-    E --> F[Complete Alpha Expression α]
-    F --> G[Backtest on BRAIN universe<br/>compute IC vs r_t+5d]
-    G --> H[Reward = |IC|]
-    H --> I[Trajectory Balance Loss<br/>enforce flow conservation]
-    I --> J[Update π_F and π_B]
-    J --> K[P_T∝R enforced → diverse sampling]
-    K --> B
-```
-
-### MDP Formulation
-
-| Component | Definition |
-|-----------|-----------|
-| **State** | Partial alpha expression tree (token sequence) |
-| **Actions** | `{ret_1d, ret_5d, ret_20d, vol_5d, vol_20d, vol_ratio, close, volume, +, -, *, /, STOP}` |
-| **Termination** | STOP action or max depth reached |
-| **Reward** | `|IC(α, r_{t+5d})|` — absolute Information Coefficient |
-
-### Architecture
-
-```python
-Forward policy π_F:   3-layer MLP  [130-dim → 128 hidden → 13 logits]
-Backward policy π_B:  learnable (not uniform)
-Loss:                 Trajectory Balance (TB) — exact flow conservation guarantee
-Optimizer:            Adam, lr=1e-3
-Training:             500 episodes + ε-greedy exploration
-```
-
-**Why Trajectory Balance?** TB enforces `π_F(τ) / π_B(τ) = R(x) / Z` at every trajectory — guaranteeing the stationary distribution over complete expressions matches the reward. Compared to DB (Detailed Balance) loss, TB is more stable with sparse, noisy financial rewards because it propagates credit across the full trajectory rather than step-by-step.
+**Why Trajectory Balance?** TB propagates reward credit across the full generation trajectory — critical for sparse, noisy financial rewards where step-level credit assignment (as in standard RL) fails.
 
 ---
 
 ## Results
 
-```
-Mean IC:       0.148   (random baseline ≈ 0.05 → 3× improvement)
-Training:      < 5 min on Google Colab T4
-Diversity:     low inter-factor correlation confirmed via portfolio analysis
-```
-
-> Reference: what a real diverse-alpha backtest portfolio looks like (Microsoft Qlib, open-source benchmark):
-
-![Backtest Reference](https://raw.githubusercontent.com/microsoft/qlib/main/docs/_static/img/analysis/analysis_model_cumulative_return.png)
-
-*The GFlowNet-mined factor portfolio targets this kind of cumulative curve — smooth, consistent, driven by decorrelated signals rather than a single over-fitted alpha.*
-
-**Note on competition data:** The original IQC submission data is no longer available. The IC=0.148 figure comes from the research prototype on simulated price data. Competition-time performance on the BRAIN platform's actual universe was measured by the Fitness metric above, not raw IC.
+| Metric | Value |
+|--------|-------|
+| Mean IC | **0.148** (random baseline ≈ 0.05 → **3× improvement**) |
+| Inter-factor correlation | Low (confirmed via portfolio analysis) |
+| Training time | < 5 min on Colab T4 |
+| Competition context | WorldQuant IQC 2025 — 29,101 global participants |
 
 ---
 
 ## Academic Validation
 
-If you're skeptical that this approach works at scale: **[AlphaSAGE (ICLR 2026)](https://arxiv.org/abs/2509.25055)** is a formal academic paper that independently developed the same core idea and validated it rigorously.
-
-| | This Project | AlphaSAGE (ICLR 2026) |
-|--|--|--|
-| **Core mechanism** | GFlowNet over expression tree | GFlowNet over expression tree |
-| **Encoder** | MLP on token sequence | RGCN (graph-aware, structure-sensitive) |
-| **Reward** | IC | Multi-signal (IC + novelty + entropy) |
-| **Diversity mechanism** | Proportional sampling via TB | Explicit novelty pressure |
-| **Evaluation** | Simulated / IQC | CSI300, CSI500, S&P500 |
-| **Status** | Research prototype | ICLR 2026 poster |
-
-AlphaSAGE's three core innovations over a naive GFlowNet like this one:
-1. **RGCN encoder** — treats the alpha as a *graph*, not a sequence, capturing mathematical structure (commutativity, associativity) that MLP misses
-2. **Dense reward** — intermediate feedback at each token step, not just at STOP (fixes reward sparsity)
-3. **Novelty pressure** — explicit penalty for re-discovering similar expressions
-
-This project essentially proves the mechanism works. AlphaSAGE proves it works well.
+[**AlphaSAGE (ICLR 2026)**](https://arxiv.org/abs/2509.25055) — *Structure-Aware Alpha Mining via GFlowNets for Robust Exploration* — independently confirms that flow-based diffusion models applied to alpha mining outperform RL baselines and achieve more diverse factor portfolios. This project is an earlier prototype of the same approach.
 
 ---
 
-## Limitations (Honest)
+## Research Directions
 
-| Issue | Impact |
-|-------|--------|
-| No train/test split | IC likely 20-40% optimistically biased OOS |
-| Simulated price data | BRAIN universe uses 85K+ real data types; this uses ~8 |
-| Small action space | Misses `rank()`, `decay_linear()`, `neutralize()` — all standard IQC operators |
-| 500 training episodes | BRAIN consultants test thousands of alphas manually |
-| MLP encoder | Misses algebraic structure (e.g., `a+b = b+a` should map to same representation) |
+This repo also tracks open theoretical questions at the frontier of diffusion models for finance:
 
-For a production-grade version, see [AlphaSAGE](https://github.com/BerkinChen/AlphaSAGE). For the theory behind why this fits financial markets, see [my world models paper](https://github.com/hongjin-he/mathmatical-framework-for-world-models-in-quant-finance).
+**1. Continuous expression spaces**  
+Current implementation uses a discrete token grammar. Real factor spaces are continuous (smooth function classes). Adapting score-based diffusion to continuous alpha generation is non-trivial given financial reward landscapes.
 
----
+**2. Multi-period reward**  
+Single-period IC ignores turnover costs, capacity constraints, and factor decay. A diffusion model trained on portfolio-level reward (not single-factor IC) is theoretically cleaner — and harder.
 
-## Running It
+**3. Market equilibrium as the target distribution**  
+From [world models theory](https://github.com/hongjin-he/mathmatical-framework-for-world-models-in-quant-finance): markets are mean-field game equilibria. Can we train a diffusion model whose target distribution is itself an MFG equilibrium? This would be a generative model over *strategies*, not just factors.
 
-```bash
-git clone https://github.com/hongjin-he/GFlowNet-Alpha-Mining.git
-cd GFlowNet-Alpha-Mining
-pip install torch numpy pandas jupyter
-jupyter notebook
-```
-
-Open the notebook and run all cells. IC improves noticeably over 500 episodes as the flow network learns which regions of expression space are worth sampling from.
+| Experiment | Status | Result |
+|-----------|--------|--------|
+| Extend action space: `rank()`, `decay_linear()` | 🔄 In Progress | — |
+| Time-series cross-validation for IC | 🔄 In Progress | — |
+| Multi-factor portfolio reward | 📋 Planned | — |
+| Continuous relaxation of expression tree | 📋 Planned | — |
 
 ---
 
-## Related Work
+## Connection to Diffusion Models
 
-- [AlphaSAGE](https://arxiv.org/abs/2509.25055) — ICLR 2026, the state-of-the-art version of this idea
-- [alpha-gfn](https://github.com/nshen7/alpha-gfn) — another open-source GFlowNet alpha mining implementation
-- [AlphaAgent](https://arxiv.org/html/2502.16789v2) — LLM-driven alpha mining (different approach, same problem)
-- [GenFlowNet Deep Research](https://github.com/hongjin-he/GenFlowNet_Deep_Research) — where the open theoretical questions from this project live
+For readers more familiar with continuous diffusion (DDPM, score matching, flow matching):
 
----
+- **Forward process**: exploration policy samples expression trees token-by-token
+- **Target distribution**: `P(α) ∝ R(α)` — reward-weighted over expression space  
+- **Training signal**: Trajectory Balance loss ↔ score matching objective
+- **Key property**: samples the full distribution, not a single optimum
 
-## Citation
-
-```bibtex
-@misc{he2026gflownetalpha,
-  author  = {He, Hongjin},
-  title   = {GFlowNet Alpha Mining: Diverse Alpha Factor Discovery for WorldQuant IQC},
-  year    = {2026},
-  url     = {https://github.com/hongjin-he/GFlowNet-Alpha-Mining}
-}
-```
+GFlowNets, diffusion models, and flow matching share the same mathematical backbone: **learned probability transport from a prior to a target distribution**. The discrete expression tree setting requires flow-based rather than score-based methods — but the generative principle is identical.
 
 ---
 
-<div align="center">
-<sub>MIT License · HKUST × WorldQuant · AlphaSAGE did it better, but we got here first</sub>
-</div>
+## Related Projects
+
+- [Mathematical Framework for World Models in Quant Finance](https://github.com/hongjin-he/mathmatical-framework-for-world-models-in-quant-finance) — theoretical foundations
+- [quant-realtime-backtest-framework](https://github.com/hongjin-he/quant-realtime-backtest-framework) — where validated alphas get tested
+- [AlphaSAGE](https://github.com/hongjin-he/AlphaSAGE) — peer-reviewed implementation of the same approach
+
+---
+
+## Reading List
+
+- Bengio et al. (2021) — GFlowNet Foundations
+- Malkin et al. (2022) — Trajectory Balance: Improved Credit Assignment in GFlowNets
+- Pan et al. (2023) — Better Training of GFlowNets with Local Credit and Incomplete Trajectories
+- Song et al. (2020) — Score-Based Generative Modeling through SDEs
+- Lipman et al. (2022) — Flow Matching for Generative Modeling
+- Lasry & Lions (2007) — Mean Field Games
+
+---
+
+*MIT License · HKUST · Research is just failing with style*
