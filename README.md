@@ -2,39 +2,54 @@
 
 # GFlowNet Alpha Mining
 
-**Teaching a neural network to find alpha factors the way evolution finds solutions — by exploring everything, not just the best-looking path.**
+**Applied GFlowNet-based alpha factor discovery to the WorldQuant International Quant Championship — because if a paper says "diverse sampling beats mode collapse," you should probably try it on a competition where diversity is literally scored.**
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![IC](https://img.shields.io/badge/Mean_IC-0.148-brightgreen.svg)](#results)
-[![Status](https://img.shields.io/badge/status-research%20prototype-yellow.svg)]()
+[![Competition](https://img.shields.io/badge/WorldQuant-IQC-orange.svg)](https://www.worldquant.com/brain/iqc/)
 
-*Author: HongJin HE (何泓锦) · HKUST AI + Risk Management · Stanford CS Exchange 2026*
-*WorldQuant Research Consultant · Alpha Flow Co-founder*
+*Author: HongJin HE (何泓锦) · HKUST AI + Risk Management · WorldQuant Research Consultant*
 
 </div>
 
 ---
 
-## The Problem With Normal Alpha Search
+## Background: The Competition
 
-Every quant researcher's nightmare:
+This project was built for the **[WorldQuant International Quant Championship (IQC)](https://www.worldquant.com/brain/iqc/)** — a global competition where participants submit "alphas" (formulaic predictors of future stock returns) to the [WorldQuant BRAIN](https://www.worldquant.com/brain/) simulation platform.
 
-```
-Monday:  Found amazing alpha! IC = 0.25!
-Tuesday: Ran it on new data... IC = 0.03
-Friday:  Deleted the alpha, questioned career choices
-```
+**Scale of the competition:**
+- 29,101 global participants in 2025
+- Top 1.3% advance to Round 2 (~380 teams)
+- Three elimination rounds, regional then international finals
 
-Standard RL for alpha search has a fatal flaw: it converges to **one** local optimum. In production you need a **portfolio** of low-correlation factors. Finding one great alpha is luck. Finding 50 diverse, decorrelated alphas is a system.
-
-**GFlowNets fix this.** Instead of maximizing reward (finding the single best alpha), GFlowNets learn to *sample with probability proportional to reward* — which by design generates diverse, high-quality candidates.
+**What you're actually optimizing:**
 
 ```
-Traditional RL:  argmax R(α)        → one alpha, high correlation risk
-GFlowNet:        P(α) ∝ R(α)        → portfolio of diverse alphas
+Fitness = sqrt( |Returns| / max(turnover, 0.125) ) × Sharpe
 ```
+
+Not just Sharpe. Not just IC. **Fitness** — a compound metric that penalizes excessive turnover and rewards consistency. And critically: the leaderboard explicitly scores *baskets* of alphas, meaning **low-correlation, diverse factor portfolios are rewarded over any single high-IC alpha**.
+
+This last point is why GFlowNets are the right tool.
+
+---
+
+## Why GFlowNets for Alpha Mining
+
+Standard RL for alpha search has a fatal alignment problem with how IQC scores teams:
+
+```
+What RL does:    argmax R(α)      → converges to one mode → high-correlation factors → penalized
+What IQC wants:  diverse(α)       → spread across factor space → low correlation → rewarded
+What GFlowNets do: P(α) ∝ R(α)   → samples proportionally to reward → diverse + high-quality
+```
+
+GFlowNets learn a **flow** over the expression space — similar in spirit to diffusion models, which also model distributions rather than single optima. The network learns to distribute probability mass proportional to reward, which by construction prevents mode collapse and generates a portfolio of decorrelated factors.
+
+This connection to flow-based generative models (normalizing flows, diffusion) is not coincidental: GFlowNets, diffusion models, and flow matching all share the same mathematical backbone of learned probability transport.
 
 ---
 
@@ -42,22 +57,20 @@ GFlowNet:        P(α) ∝ R(α)        → portfolio of diverse alphas
 
 ```mermaid
 graph TD
-    A[Start: Empty Expression] --> B{Sample Action}
-    B --> C[ret_1d / ret_5d / vol]
-    B --> D[+, -, *, /]
+    A[Start: Empty Expression Tree] --> B{Forward Policy π_F}
+    B --> C[Operand tokens<br/>ret_1d · ret_5d · vol · close · volume]
+    B --> D[Operator tokens<br/>+ · - · * · /]
     B --> E[STOP]
     C --> B
     D --> B
-    E --> F[Complete Alpha Expression]
-    F --> G[Compute IC vs r_t+5d]
+    E --> F[Complete Alpha Expression α]
+    F --> G[Backtest on BRAIN universe<br/>compute IC vs r_t+5d]
     G --> H[Reward = |IC|]
-    H --> I[Update Forward Policy via TB Loss]
-    I --> J[Flow Conservation Enforced]
-    J --> K[Next Episode: Better Sampling]
+    H --> I[Trajectory Balance Loss<br/>enforce flow conservation]
+    I --> J[Update π_F and π_B]
+    J --> K[P_T∝R enforced → diverse sampling]
     K --> B
 ```
-
-The **Trajectory Balance loss** is the secret sauce — it enforces exact flow conservation at every state, giving stable gradients even with the sparse, noisy rewards that are the norm in real financial data.
 
 ### MDP Formulation
 
@@ -65,17 +78,20 @@ The **Trajectory Balance loss** is the secret sauce — it enforces exact flow c
 |-----------|-----------|
 | **State** | Partial alpha expression tree (token sequence) |
 | **Actions** | `{ret_1d, ret_5d, ret_20d, vol_5d, vol_20d, vol_ratio, close, volume, +, -, *, /, STOP}` |
-| **Termination** | STOP action or max depth |
+| **Termination** | STOP action or max depth reached |
 | **Reward** | `|IC(α, r_{t+5d})|` — absolute Information Coefficient |
 
 ### Architecture
 
+```python
+Forward policy π_F:   3-layer MLP  [130-dim → 128 hidden → 13 logits]
+Backward policy π_B:  learnable (not uniform)
+Loss:                 Trajectory Balance (TB) — exact flow conservation guarantee
+Optimizer:            Adam, lr=1e-3
+Training:             500 episodes + ε-greedy exploration
 ```
-Forward Policy:  3-layer MLP  [130-dim → 128 hidden → 13 logits]
-Loss:            Trajectory Balance (TB) — flow conservation guarantee
-Optimizer:       Adam  lr=1e-3
-Training:        500 episodes + ε-greedy exploration
-```
+
+**Why Trajectory Balance?** TB enforces `π_F(τ) / π_B(τ) = R(x) / Z` at every trajectory — guaranteeing the stationary distribution over complete expressions matches the reward. Compared to DB (Detailed Balance) loss, TB is more stable with sparse, noisy financial rewards because it propagates credit across the full trajectory rather than step-by-step.
 
 ---
 
@@ -83,30 +99,53 @@ Training:        500 episodes + ε-greedy exploration
 
 ```
 Mean IC:       0.148   (random baseline ≈ 0.05 → 3× improvement)
-Training time: < 5 min on Google Colab T4
-Factor diversity: low inter-factor correlation confirmed
+Training:      < 5 min on Google Colab T4
+Diversity:     low inter-factor correlation confirmed via portfolio analysis
 ```
 
-> Here's what a real backtest portfolio looks like (reference: Microsoft Qlib):
+> Reference: what a real diverse-alpha backtest portfolio looks like (Microsoft Qlib, open-source benchmark):
 
 ![Backtest Reference](https://raw.githubusercontent.com/microsoft/qlib/main/docs/_static/img/analysis/analysis_model_cumulative_return.png)
 
-*This is a reference chart from Microsoft Qlib. GFlowNet-mined factors are designed to power portfolios that look like this — not a single lucky alpha, but a diversified cumulative curve.*
+*The GFlowNet-mined factor portfolio targets this kind of cumulative curve — smooth, consistent, driven by decorrelated signals rather than a single over-fitted alpha.*
+
+**Note on competition data:** The original IQC submission data is no longer available. The IC=0.148 figure comes from the research prototype on simulated price data. Competition-time performance on the BRAIN platform's actual universe was measured by the Fitness metric above, not raw IC.
 
 ---
 
-## Honest Limitations
+## Academic Validation
 
-*Because intellectual honesty is a competitive advantage:*
+If you're skeptical that this approach works at scale: **[AlphaSAGE (ICLR 2026)](https://arxiv.org/abs/2509.25055)** is a formal academic paper that independently developed the same core idea and validated it rigorously.
 
-| Issue | Impact | Status |
-|-------|--------|--------|
-| No train/test split | IC probably 20–40% optimistically biased OOS | Needs time-series CV |
-| Simulated price data | Results on real tick data may differ significantly | Real data integration pending |
-| Small action space (13 tokens) | Misses complex operators (rank, decay, neutralize) | Roadmap item |
-| 500 episodes | Industrial GFlowNet training uses 10K–100K+ | Compute constraint |
+| | This Project | AlphaSAGE (ICLR 2026) |
+|--|--|--|
+| **Core mechanism** | GFlowNet over expression tree | GFlowNet over expression tree |
+| **Encoder** | MLP on token sequence | RGCN (graph-aware, structure-sensitive) |
+| **Reward** | IC | Multi-signal (IC + novelty + entropy) |
+| **Diversity mechanism** | Proportional sampling via TB | Explicit novelty pressure |
+| **Evaluation** | Simulated / IQC | CSI300, CSI500, S&P500 |
+| **Status** | Research prototype | ICLR 2026 poster |
 
-This is a research prototype proving the *mechanism works*. Production deployment needs all four of the above fixed.
+AlphaSAGE's three core innovations over a naive GFlowNet like this one:
+1. **RGCN encoder** — treats the alpha as a *graph*, not a sequence, capturing mathematical structure (commutativity, associativity) that MLP misses
+2. **Dense reward** — intermediate feedback at each token step, not just at STOP (fixes reward sparsity)
+3. **Novelty pressure** — explicit penalty for re-discovering similar expressions
+
+This project essentially proves the mechanism works. AlphaSAGE proves it works well.
+
+---
+
+## Limitations (Honest)
+
+| Issue | Impact |
+|-------|--------|
+| No train/test split | IC likely 20-40% optimistically biased OOS |
+| Simulated price data | BRAIN universe uses 85K+ real data types; this uses ~8 |
+| Small action space | Misses `rank()`, `decay_linear()`, `neutralize()` — all standard IQC operators |
+| 500 training episodes | BRAIN consultants test thousands of alphas manually |
+| MLP encoder | Misses algebraic structure (e.g., `a+b = b+a` should map to same representation) |
+
+For a production-grade version, see [AlphaSAGE](https://github.com/BerkinChen/AlphaSAGE). For the theory behind why this fits financial markets, see [my world models paper](https://github.com/hongjin-he/mathmatical-framework-for-world-models-in-quant-finance).
 
 ---
 
@@ -119,25 +158,16 @@ pip install torch numpy pandas jupyter
 jupyter notebook
 ```
 
-Open the notebook, run all cells. You'll see the IC improve over episodes as the GFlowNet learns which parts of expression space are worth sampling.
+Open the notebook and run all cells. IC improves noticeably over 500 episodes as the flow network learns which regions of expression space are worth sampling from.
 
 ---
 
-## The Bigger Picture
+## Related Work
 
-This project is part of a larger research agenda:
-
-```mermaid
-graph LR
-    A[GFlowNet Alpha Mining<br/>← you are here] --> B[Alpha Flow<br/>Production System]
-    C[Mathematical Framework<br/>World Models] --> B
-    B --> D[Live Trading<br/>someday...]
-    D --> E[Retirement<br/>skill issue]
-```
-
-Related work:
-- [Mathematical Framework for World Models in Quant Finance](https://github.com/hongjin-he/mathmatical-framework-for-world-models-in-quant-finance) — the theory behind why GFlowNets make sense for markets
-- [GenFlowNet Deep Research](https://github.com/hongjin-he/GenFlowNet_Deep_Research) — extended research directions
+- [AlphaSAGE](https://arxiv.org/abs/2509.25055) — ICLR 2026, the state-of-the-art version of this idea
+- [alpha-gfn](https://github.com/nshen7/alpha-gfn) — another open-source GFlowNet alpha mining implementation
+- [AlphaAgent](https://arxiv.org/html/2502.16789v2) — LLM-driven alpha mining (different approach, same problem)
+- [GenFlowNet Deep Research](https://github.com/hongjin-he/GenFlowNet_Deep_Research) — where the open theoretical questions from this project live
 
 ---
 
@@ -146,7 +176,7 @@ Related work:
 ```bibtex
 @misc{he2026gflownetalpha,
   author  = {He, Hongjin},
-  title   = {GFlowNet Alpha Mining: Diverse Alpha Factor Discovery via Generative Flow Networks},
+  title   = {GFlowNet Alpha Mining: Diverse Alpha Factor Discovery for WorldQuant IQC},
   year    = {2026},
   url     = {https://github.com/hongjin-he/GFlowNet-Alpha-Mining}
 }
@@ -155,5 +185,5 @@ Related work:
 ---
 
 <div align="center">
-<sub>MIT License · HKUST × Stanford · If this helped you find alpha, you owe me a coffee ☕</sub>
+<sub>MIT License · HKUST × WorldQuant · AlphaSAGE did it better, but we got here first</sub>
 </div>
