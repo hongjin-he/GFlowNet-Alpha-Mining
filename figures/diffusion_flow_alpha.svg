@@ -1,0 +1,127 @@
+<svg viewBox="0 0 920 520" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="a-main" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#2D3748"/>
+    </marker>
+    <marker id="a-blue" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#4A90D9"/>
+    </marker>
+    <marker id="a-purple" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#805AD5"/>
+    </marker>
+    <marker id="a-green" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#276749"/>
+    </marker>
+    <linearGradient id="g-flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#EBF8FF"/>
+      <stop offset="100%" stop-color="#FAF5FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="920" height="520" fill="#FAFBFC" rx="8"/>
+
+  <!-- Title -->
+  <text x="460" y="32" text-anchor="middle" font-size="15" font-weight="700" fill="#1A202C">Diffusion-Flow Alpha Mining: Probability Transport over Expression Space</text>
+  <text x="460" y="50" text-anchor="middle" font-size="10.5" fill="#718096">GFlowNets / flow matching / diffusion models share the same backbone: learned transport P(prior) → P(α) ∝ R(α)</text>
+  <line x1="40" y1="62" x2="880" y2="62" stroke="#E2E8F0" stroke-width="1"/>
+
+  <!-- ===== TOP: PRIOR (uniform over expression trees) ===== -->
+  <rect x="50" y="76" width="190" height="100" rx="6" fill="#F7FAFC" stroke="#CBD5E0" stroke-width="1.5"/>
+  <text x="145" y="96" text-anchor="middle" font-size="11" font-weight="600" fill="#4A5568">Prior P₀</text>
+  <text x="145" y="112" text-anchor="middle" font-size="9.5" fill="#718096">Uniform over expression</text>
+  <text x="145" y="125" text-anchor="middle" font-size="9.5" fill="#718096">tree skeletons</text>
+  <text x="145" y="142" text-anchor="middle" font-size="9.5" fill="#4A5568">α ~ Unif(𝒯_expr)</text>
+  <text x="145" y="157" text-anchor="middle" font-size="9" fill="#A0AEC0">e.g. (op1 ∘ op2 ∘ …)</text>
+  <text x="145" y="170" text-anchor="middle" font-size="9" fill="#A0AEC0">sampled uniformly</text>
+
+  <!-- ===== FLOW PROCESS (center strip) ===== -->
+  <!-- Background strip -->
+  <rect x="280" y="68" width="360" height="390" rx="8" fill="url(#g-flow)" stroke="#E2E8F0" stroke-width="1.5"/>
+  <text x="460" y="88" text-anchor="middle" font-size="11" font-weight="700" fill="#2D3748">Diffusion / Flow Matching Transport</text>
+  <text x="460" y="103" text-anchor="middle" font-size="9.5" fill="#718096">Continuous-time probability flow: dP_t/dt = −div(v_t P_t)</text>
+  <line x1="290" y1="110" x2="630" y2="110" stroke="#E2E8F0" stroke-width="1"/>
+
+  <!-- Step 1 node -->
+  <rect x="310" y="118" width="300" height="60" rx="5" fill="white" stroke="#4A90D9" stroke-width="1.5"/>
+  <text x="460" y="137" text-anchor="middle" font-size="10" font-weight="600" fill="#2B6CB0">t = 0: P_0 (prior)</text>
+  <text x="460" y="152" text-anchor="middle" font-size="9.5" fill="#4A5568">Start from Gaussian noise / uniform tree</text>
+  <text x="460" y="165" text-anchor="middle" font-size="9" fill="#718096">z_0 ~ 𝒩(0, I)  or  α_0 ~ Unif(𝒯)</text>
+
+  <line x1="460" y1="178" x2="460" y2="196" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#a-blue)"/>
+  <text x="470" y="190" font-size="8.5" fill="#4A90D9">v_t(z) = ∇log q_t(z) · ε_θ(z,t)</text>
+
+  <!-- Step 2 node -->
+  <rect x="310" y="198" width="300" height="60" rx="5" fill="white" stroke="#805AD5" stroke-width="1.5"/>
+  <text x="460" y="217" text-anchor="middle" font-size="10" font-weight="600" fill="#553C9A">t = T/2: Intermediate P_{T/2}</text>
+  <text x="460" y="232" text-anchor="middle" font-size="9.5" fill="#4A5568">Trajectory balance loss ensures</text>
+  <text x="460" y="247" text-anchor="middle" font-size="9" fill="#718096">TB: F(s) P_F(τ|s) = Z P_B(τ|s)</text>
+
+  <line x1="460" y1="258" x2="460" y2="276" stroke="#805AD5" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#a-purple)"/>
+
+  <!-- Step 3 node -->
+  <rect x="310" y="278" width="300" height="60" rx="5" fill="white" stroke="#276749" stroke-width="1.5"/>
+  <text x="460" y="297" text-anchor="middle" font-size="10" font-weight="600" fill="#276749">t = T: Target P_T ∝ R(α)</text>
+  <text x="460" y="312" text-anchor="middle" font-size="9.5" fill="#4A5568">Expressions sampled ~ R(α) = IC(α)</text>
+  <text x="460" y="327" text-anchor="middle" font-size="9" fill="#718096">High-reward alphas more probable</text>
+
+  <line x1="460" y1="338" x2="460" y2="356" stroke="#276749" stroke-width="1.5" marker-end="url(#a-green)"/>
+
+  <!-- Equivalence box -->
+  <rect x="310" y="358" width="300" height="92" rx="5" fill="#F7FAFC" stroke="#CBD5E0" stroke-width="1"/>
+  <text x="460" y="377" text-anchor="middle" font-size="10" font-weight="600" fill="#4A5568">Mathematical Unification</text>
+  <line x1="320" y1="383" x2="600" y2="383" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="320" y="397" font-size="9" fill="#4A5568">• GFlowNet TB loss ≡ flow matching for discrete</text>
+  <text x="320" y="410" font-size="9" fill="#4A5568">• Continuous: DDPM score = ∇log p_t(x)</text>
+  <text x="320" y="423" font-size="9" fill="#4A5568">• Trajectory: P_F(τ)/P_B(τ) = R(α)/Z</text>
+  <text x="320" y="436" font-size="9" fill="#4A5568">• Diversity ≠ RL argmax → better coverage</text>
+  <text x="320" y="447" font-size="9" fill="#718096">  Exploration over α-space via entropy regularization</text>
+
+  <!-- ===== RIGHT: Discovered Alphas ===== -->
+  <rect x="680" y="76" width="190" height="380" rx="6" fill="#F0FFF4" stroke="#48BB78" stroke-width="2"/>
+  <text x="775" y="96" text-anchor="middle" font-size="11" font-weight="700" fill="#276749">Target P_T ∝ R(α)</text>
+  <text x="775" y="111" text-anchor="middle" font-size="9.5" fill="#4A5568">High-IC expression pool</text>
+  <line x1="690" y1="118" x2="860" y2="118" stroke="#C6F6D5" stroke-width="1"/>
+
+  <!-- Alpha examples -->
+  <rect x="693" y="126" width="164" height="36" rx="4" fill="white" stroke="#68D391" stroke-width="1.5"/>
+  <text x="775" y="141" text-anchor="middle" font-size="9" fill="#276749" font-weight="600">α₁ (IC = 0.087)</text>
+  <text x="775" y="155" text-anchor="middle" font-size="8.5" fill="#4A5568">rank(mom_12) / vol_60</text>
+
+  <rect x="693" y="168" width="164" height="36" rx="4" fill="white" stroke="#68D391" stroke-width="1.5"/>
+  <text x="775" y="183" text-anchor="middle" font-size="9" fill="#276749" font-weight="600">α₂ (IC = 0.074)</text>
+  <text x="775" y="197" text-anchor="middle" font-size="8.5" fill="#4A5568">cs_rank(corr(ret, vol))</text>
+
+  <rect x="693" y="210" width="164" height="36" rx="4" fill="white" stroke="#68D391" stroke-width="1.5"/>
+  <text x="775" y="225" text-anchor="middle" font-size="9" fill="#276749" font-weight="600">α₃ (IC = 0.063)</text>
+  <text x="775" y="239" text-anchor="middle" font-size="8.5" fill="#4A5568">log(turnover) − β·ret</text>
+
+  <rect x="693" y="252" width="164" height="36" rx="4" fill="white" stroke="#C6F6D5" stroke-width="1"/>
+  <text x="775" y="267" text-anchor="middle" font-size="9" fill="#4A5568">α₄ (IC = 0.051)</text>
+  <text x="775" y="281" text-anchor="middle" font-size="8.5" fill="#718096">ts_mean(ret, 5) / sigma</text>
+
+  <rect x="693" y="294" width="164" height="36" rx="4" fill="white" stroke="#C6F6D5" stroke-width="1"/>
+  <text x="775" y="309" text-anchor="middle" font-size="9" fill="#718096">α₅ (IC = 0.044)</text>
+  <text x="775" y="323" text-anchor="middle" font-size="8.5" fill="#A0AEC0">rank(close/vwap−1)</text>
+
+  <text x="775" y="350" text-anchor="middle" font-size="10" fill="#A0AEC0">⋮</text>
+
+  <!-- Diversity metrics -->
+  <rect x="693" y="362" width="164" height="82" rx="4" fill="#FFFFF0" stroke="#F6AD55" stroke-width="1.5"/>
+  <text x="775" y="378" text-anchor="middle" font-size="9.5" fill="#975A16" font-weight="600">vs. RL Search</text>
+  <text x="698" y="393" font-size="8.5" fill="#4A5568">Diffusion-Flow:</text>
+  <text x="698" y="406" font-size="8.5" fill="#276749">  IC decor. ≈ 0.12 (diverse)</text>
+  <text x="698" y="419" font-size="8.5" fill="#4A5568">RL argmax:</text>
+  <text x="698" y="432" font-size="8.5" fill="#E53E3E">  IC decor. ≈ 0.58 (collapse)</text>
+  <text x="775" y="443" text-anchor="middle" font-size="8" fill="#718096">Lower decorrelation = more diverse pool</text>
+
+  <!-- Arrows: prior → flow, flow → target -->
+  <line x1="240" y1="126" x2="310" y2="145" stroke="#2D3748" stroke-width="1.5" marker-end="url(#a-main)"/>
+  <text x="270" y="138" text-anchor="middle" font-size="8.5" fill="#4A5568">flow</text>
+  <line x1="610" y1="260" x2="680" y2="240" stroke="#276749" stroke-width="1.5" marker-end="url(#a-green)"/>
+
+  <!-- ===== Bottom annotation ===== -->
+  <rect x="50" y="456" width="820" height="52" rx="5" fill="#F7FAFC" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="460" y="473" text-anchor="middle" font-size="9.5" font-weight="600" fill="#4A5568">Reference: AlphaSage (Shi et al. 2023) + GFlowNet-TB (Bengio et al. 2023) + Flow Matching (Lipman et al. 2022)</text>
+  <text x="460" y="488" text-anchor="middle" font-size="9" fill="#718096">Trajectory balance loss = continuous-time flow matching on discrete expression graph · Entropy ≠ argmax → maintains diversity of alpha pool</text>
+  <text x="460" y="502" text-anchor="middle" font-size="9" fill="#A0AEC0">Expression operators: rank, cs_rank, ts_mean, ts_std, log, corr, mom_N, vol_N, β, turnover, vwap deviation</text>
+</svg>

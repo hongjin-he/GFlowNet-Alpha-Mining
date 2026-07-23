@@ -18,6 +18,12 @@ What we do:      P(α) ∝ R(α)   → samples the full distribution → diverse
 
 Alpha mining is a **distribution problem**, not an optimization problem. A portfolio of 20 low-correlation alphas with IC=0.10 beats a single alpha with IC=0.20. This is exactly what diffusion-style generative models are built for.
 
+### Figure 1 — Probability Transport over Expression Space
+
+![Diffusion-Flow Alpha Mining](figures/diffusion_flow_alpha.svg)
+
+The diagram shows the learned transport from a uniform prior over expression trees to a target distribution P(α) ∝ R(α), where R(α) = IC(α) is the information coefficient. The Trajectory Balance loss (GFlowNet-TB) is mathematically equivalent to continuous-time flow matching on the discrete expression graph — this is the key insight that unifies diffusion models and GFlowNets under a single framework.
+
 ---
 
 ## Technical Approach
